@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MEDI-TRACK – 3D Model</title>
+<style>
+:root{--bg1:#16294f;--bg2:#060c1b;--ink:#eaf1ff;--mut:#a3b5da;--acc:#3b82f6;--pill:rgba(10,24,56,.84);--line:rgba(130,170,235,.35);box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html,body{height:100%;margin:0;overflow:hidden;background:var(--bg2);color:var(--ink);font-family:"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+#stage{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 30%,var(--bg1),var(--bg2) 78%)}
+canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+header{position:absolute;left:16px;top:calc(env(safe-area-inset-top,0px) + 12px);pointer-events:none}
+h1{margin:0;font-size:20px;font-weight:700}
+header p{margin:2px 0 0;font-size:13px;color:var(--mut)}
+#hint{position:absolute;right:14px;top:calc(env(safe-area-inset-top,0px) + 14px);font-size:12px;color:var(--mut);text-align:right;pointer-events:none;max-width:42vw}
+#bar{position:absolute;left:0;right:0;bottom:calc(env(safe-area-inset-bottom,0px) + 10px);display:flex;flex-wrap:wrap;gap:6px;justify-content:center;padding:0 10px}
+.grp{display:flex;gap:4px;background:var(--pill);border:1px solid var(--line);border-radius:12px;padding:4px;backdrop-filter:blur(6px)}
+button{font:inherit;font-size:13px;color:var(--ink);background:transparent;border:0;border-radius:8px;padding:8px 11px;cursor:pointer}
+button:hover{background:rgba(130,170,235,.2)}
+button:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+button.on{background:var(--acc);color:#fff}
+.tag{position:absolute;left:0;top:0;font-size:11.5px;white-space:nowrap;background:var(--pill);border:1px solid var(--line);color:var(--ink);padding:2px 7px;border-radius:6px;pointer-events:none}
+.tag{transition:opacity .15s}.tag::after{content:"";position:absolute;left:50%;top:100%;width:6px;height:6px;margin:3px 0 0 -3px;border-radius:50%;background:#7fb0ff}
+.tag.in{border-color:#5eead4}.tag.in::after{background:#5eead4}
+#panel{position:absolute;right:12px;top:calc(env(safe-area-inset-top,0px) + 62px);bottom:78px;width:276px;overflow:auto;background:var(--pill);border:1px solid var(--line);border-radius:14px;padding:10px;backdrop-filter:blur(8px);z-index:5}
+#panel h3{margin:12px 4px 4px;font-size:13px;font-weight:700;color:var(--mut)}
+#panel .seg{display:flex;gap:4px}#panel .seg button{flex:1;border:1px solid var(--line)}
+#panel .it{display:block;width:100%;text-align:left;padding:7px 9px;margin:2px 0;border-radius:8px}
+#panel .it b{font-weight:600;font-size:13px}
+#panel .it small{display:none;margin-top:3px;font-size:12px;line-height:1.35;color:var(--mut)}
+#panel .it.on{background:rgba(255,216,74,.16);box-shadow:inset 0 0 0 1px #ffd84a}
+#panel .it.on small,#panel .st small{display:block}
+@media(max-width:700px){#panel{left:10px;right:10px;width:auto;top:auto;bottom:calc(env(safe-area-inset-bottom,0px) + 64px);max-height:42vh}}
+</style></head><body>
+<div id="stage"></div>
+<header><h1>MEDI-TRACK</h1><p>Smart medication management &amp; safety device · 3D model</p></header>
+<div id="hint">Drag to rotate · scroll to zoom<br>Click a compartment lid to open it</div>
+<div id="bar">
+<div class="grp"><button data-v="front">Front</button><button data-v="right">Right</button><button data-v="back">Back</button><button data-v="left">Left</button><button data-v="top">Top</button><button data-v="bottom">Bottom</button></div>
+<div class="grp"><button id="inside">Inside view</button><button id="labels" class="on">Parts list</button><button id="auto" class="on">Auto-rotate</button></div>
+<div class="grp"><button id="zi" aria-label="Zoom in">+</button><button id="zo" aria-label="Zoom out">−</button></div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const stage=document.getElementById('stage');
+const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+stage.appendChild(renderer.domElement);
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(38,1,.1,100);
+scene.add(new THREE.HemisphereLight(0xffffff,0x3a3f55,.8));
+const key=new THREE.DirectionalLight(0xffffff,.85);key.position.set(4,8,7);key.castShadow=true;
+key.shadow.mapSize.set(2048,2048);Object.assign(key.shadow.camera,{left:-6,right:6,top:6,bottom:-6,near:1,far:25});key.shadow.bias=-.0004;scene.add(key);
+const rim=new THREE.DirectionalLight(0x9fc2ff,.55);rim.position.set(-6,4,-7);scene.add(rim);
+
+const M=(c,o)=>new THREE.MeshStandardMaterial(Object.assign({color:c,roughness:.5,metalness:.08},o||{}));
+const root=new THREE.Group();scene.add(root);
+const box=(w,h,d,m,x,y,z,p)=>{const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);o.position.set(x,y,z);(p||root).add(o);return o};
+const cyl=(r,h,m,x,y,z,rot,p,seg)=>{const o=new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,seg||24),m);o.position.set(x,y,z);if(rot)o.rotation.set(rot[0],rot[1],rot[2]);(p||root).add(o);return o};
+const sph=(r,m,x,y,z,p)=>{const o=new THREE.Mesh(new THREE.SphereGeometry(r,16,12),m);o.position.set(x,y,z);(p||root).add(o);return o};
+function rbox(w,h,d,r,m){const s=new THREE.Shape(),x=-w/2,y=-h/2;s.moveTo(x+r,y);s.lineTo(x+w-r,y);s.quadraticCurveTo(x+w,y,x+w,y+r);s.lineTo(x+w,y+h-r);s.quadraticCurveTo(x+w,y+h,x+w-r,y+h);s.lineTo(x+r,y+h);s.quadraticCurveTo(x,y+h,x,y+h-r);s.lineTo(x,y+r);s.quadraticCurveTo(x,y,x+r,y);
+ const g=new THREE.ExtrudeGeometry(s,{depth:d,bevelEnabled:true,bevelThickness:.025,bevelSize:.025,bevelSegments:3,curveSegments:8});g.translate(0,0,-d/2);return new THREE.Mesh(g,m)}
+function tex(w,h,fn){const c=document.createElement('canvas');c.width=w;c.height=h;fn(c.getContext('2d'),w,h);const t=new THREE.CanvasTexture(c);t.anisotropy=8;return t}
+const plane=(w,h,t,x,y,z,p,tr)=>{const o=new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshBasicMaterial({map:t,transparent:tr!==false}));o.position.set(x,y,z);(p||root).add(o);return o};
+const glowTex=tex(64,64,(g)=>{const r=g.createRadialGradient(32,32,0,32,32,32);r.addColorStop(0,'rgba(255,255,255,1)');r.addColorStop(.3,'rgba(255,255,255,.45)');r.addColorStop(1,'rgba(255,255,255,0)');g.fillStyle=r;g.fillRect(0,0,64,64)});
+const pulses=[];
+function led(c,x,y,z,p,s,pulse){const o=sph(s||.05,new THREE.MeshBasicMaterial({color:c}),x,y,z,p);const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex,color:c,blending:THREE.AdditiveBlending,transparent:true,depthWrite:false}));sp.scale.set((s||.05)*7,(s||.05)*7,1);sp.position.copy(o.position);(p||root).add(sp);if(pulse)pulses.push({sp,ph:Math.random()*6});return o}
+
+const shellMat=M(0xf4f5f8,{roughness:.32,transparent:true});
+const white=M(0xf4f5f8,{roughness:.32});
+const dark=M(0x23272f,{roughness:.4,metalness:.4});
+
+/* ---------- base ---------- */
+const BT=.06;
+const lip=rbox(4.5,2.25,.3,.12,white);lip.rotation.x=-Math.PI/2;lip.position.set(0,.15,.05);root.add(lip);
+plane(2.2,.15,tex(1100,75,(g,w,h)=>{g.fillStyle='#1b1b1b';g.font='italic 700 40px Arial';g.textAlign='center';g.fillText('RIGHT MEDICINE. RIGHT TIME. MORE CONFIDENCE.',w/2,54)}),-.2,.15,1.205,root);
+const bz=-.1; // base centre z
+[[4.3,1.16,BT,0,.9,-1.05+BT/2],[BT,1.16,1.9,-2.15+BT/2,.9,bz],[BT,1.16,1.9,2.15-BT/2,.9,bz],[4.3,BT,1.9,0,1.45,bz],[4.3,BT,1.9,0,.33,bz],
+ [4.3,.38,BT,0,1.29,.85-BT/2],[.24,1.16,BT,-2.03,.9,.85-BT/2],[.86,1.16,BT,1.72,.9,.85-BT/2],[3.2,.8,BT,-.31,.75,.3]]
+ .forEach(a=>box(a[0],a[1],a[2],shellMat,a[3],a[4],a[5]));
+const xs=[-1.59,-.95,-.31,.33,.97];
+[-1.91,-1.27,-.63,.01,.65,1.29].forEach(x=>box(BT,.8,.7,shellMat,x,.75,.65));
+/* logo */
+plane(1.0,1.0,tex(300,300,(g)=>{g.strokeStyle='#111';g.lineWidth=11;g.lineJoin='round';g.beginPath();g.moveTo(125,215);g.bezierCurveTo(20,140,30,45,95,55);g.bezierCurveTo(115,58,128,72,135,90);g.bezierCurveTo(143,70,165,52,195,55);g.bezierCurveTo(255,62,262,140,185,200);g.stroke();
+ g.beginPath();g.moveTo(225,196);g.lineTo(225,248);g.moveTo(199,222);g.lineTo(251,222);g.lineWidth=13;g.stroke();g.fillStyle='#111';g.font='bold 34px Arial';g.textAlign='center';g.fillText('MEDI-TRACK',150,285)}),1.74,.78,.886);
+
+/* ---------- compartments ---------- */
+const names=['MORNING','NOON','EVENING','NIGHT','EXTRA'],lc=[0x2fa8ff,0xffb300,0x2fe05a,0xff3b30,0x2fa8ff];
+const lids=[],lidMeshes=[];
+function pillMesh(i,x,k){const px=x+((k%3)-1)*.15,pz=.5+(k>2?.28:0)+(k%2)*.07,gp=new THREE.Group();gp.position.set(px,.4,pz);
+ if(i===2){const w=M(0xffffff),b=M(0x1f5fd0);cyl(.05,.1,w,0,0,.05,[Math.PI/2,0,0],gp);cyl(.05,.1,b,0,0,-.05,[Math.PI/2,0,0],gp);sph(.05,w,0,0,.1,gp);sph(.05,b,0,0,-.1,gp);gp.rotation.y=k*1.3;gp.position.y=.43}
+ else if(i===0){const m=sph(.1,M(0xf2cf1d,{roughness:.35}),0,0,0,gp);m.scale.set(1.5,.6,.85);gp.rotation.y=k*1.1;gp.position.y=.4}
+ else{const m=cyl(.1,.05,M([0,0xf4f4f4,0,0xf08a1c,0xf08fb4][i],{roughness:.35}),0,0,0,null,gp,24);gp.rotation.z=(k%2)*.12;gp.position.y=.37+(k>2?.0:0)}
+ root.add(gp)}
+xs.forEach((x,i)=>{
+ const lm=M(0xeaf3ff,{transparent:true,opacity:.4,roughness:.12,metalness:0,emissive:lc[i],emissiveIntensity:.12,depthWrite:false});lm.userData.ns=1;
+ const pv=new THREE.Group();pv.position.set(x,1.1,.32);root.add(pv);
+ const bd=box(.58,.5,.68,lm,0,-.51,.34,pv);
+ const vt=new THREE.Mesh(new THREE.CylinderGeometry(.29,.29,.68,28,1,false,Math.PI/2,Math.PI),lm);vt.rotation.x=Math.PI/2;vt.position.set(0,-.26,.34);pv.add(vt);
+ box(.3,.04,.07,white,0,-.79,.68,pv);
+ led(lc[i],0,.03,.6,pv,.045,true);
+ [bd,vt].forEach(m=>{m.userData.i=i;lidMeshes.push(m)});lids.push({pv,open:0,t:0});
+ plane(.64,.17,tex(256,68,(g,w,h)=>{g.fillStyle='#e8eaee';g.fillRect(0,0,w,h);g.strokeStyle='#9aa0ab';g.lineWidth=4;g.strokeRect(2,2,w-4,h-4);g.fillStyle='#222';g.font='bold 30px Arial';g.textAlign='center';g.fillText(names[i],w/2,46)}),x,1.25,.885,root,false);
+ for(let k=0;k<6;k++)pillMesh(i,x,k);
+ /* servo + arm + reed */
+ box(.26,.34,.3,M(0x1f4fd8),x,.95,-.05);box(.3,.03,.36,M(0x153a9e),x,1.13,-.05);cyl(.04,.06,white,x,1.16,.0);box(.05,.03,.42,white,x,1.19,.12);
+ const rd=cyl(.022,.24,M(0xcfe4e8,{transparent:true,opacity:.7}),x,1.22,.62,[0,0,Math.PI/2]);cyl(.026,.04,M(0x111111),x-.13,1.22,.62,[0,0,Math.PI/2]);cyl(.026,.04,M(0x111111),x+.13,1.22,.62,[0,0,Math.PI/2]);
+ box(.1,.05,.07,M(0xc0c4cc,{metalness:.8}),x,1.14,.62);
+});
+
+/* ---------- upper control panel ---------- */
+const panel=new THREE.Group();panel.position.set(0,1.48,-.45);panel.rotation.x=-.12;root.add(panel);
+const pb=rbox(3.9,1.4,.5,.12,shellMat);pb.position.y=.7;panel.add(pb);
+const faceT=tex(1560,560,(g,w,h)=>{g.setTransform(4/3,0,0,4/3,-100*4/3,-130*4/3);g.textAlign='center';
+ g.fillStyle='#111';g.font='900 56px Arial';g.fillText('MEDI-TRACK',750,210);
+ g.fillStyle='#b3191f';g.font='bold 18px Arial';g.fillText('SMART MEDICATION MANAGEMENT & SAFETY DEVICE',760,235);
+ g.textAlign='left';g.fillStyle='#1a1a1a';g.font='500 20px Arial';['POWER','ALERT','DOSE TAKEN','CONNECT'].forEach((s,i)=>g.fillText(s,265,376+i*43.3));
+ g.textAlign='center';g.font='500 17px Arial';g.fillText('ALARM',725,531);g.fillText('DOSE',1124,520);g.fillText('CONFIRMED',1124,541);
+ g.strokeStyle='#222';g.lineWidth=2.5;g.beginPath();g.moveTo(874,272);g.arcTo(1052,272,1052,517,16);g.arcTo(1052,517,858,517,16);g.arcTo(858,517,858,272,16);g.arcTo(858,272,1052,272,16);g.closePath();g.stroke();
+ g.textAlign='left';g.fillStyle='#b3191f';g.font='bold 21px Arial';g.fillText('HOW IT WORKS',878,305);
+ g.fillStyle='#1a1a1a';g.font='500 19px Arial';['SET SCHEDULE','REMINDER','DISPENSE','DETECT','MISSED DOSE','RECORD'].forEach((s,i)=>g.fillText((i+1)+'.  '+s,880,339+i*30.4));
+ g.fillStyle='rgba(0,0,0,.035)';g.beginPath();g.arc(725,355,85,0,7);g.fill();g.fillStyle='#2a2a2a';
+ for(let r=0;r<=60;r+=12){const n=r?Math.round(r/4.2):1;for(let k=0;k<n;k++){const a=k/n*6.2832+r;g.beginPath();g.arc(725+Math.cos(a)*r,355+Math.sin(a)*r,3.2,0,7);g.fill()}}
+ [[145,163],[1234,176],[148,517],[1225,525]].forEach(p=>{g.fillStyle='#6b6f78';g.beginPath();g.arc(p[0],p[1],12,0,7);g.fill();g.strokeStyle='#2a2d33';g.lineWidth=3;g.beginPath();g.moveTo(p[0]-8,p[1]-3);g.lineTo(p[0]+8,p[1]+3);g.stroke()})});
+const face=plane(3.9,1.4,faceT,0,.7,.282,panel);
+const bez=box(.98,.37,.03,M(0x0d0f13),-1.147,.907,.265,panel);
+const lcd=plane(.88,.29,tex(440,145,(g,w,h)=>{g.fillStyle='#a6d62e';g.fillRect(0,0,w,h);g.fillStyle='#1d2b08';g.font='bold 38px Courier New,monospace';g.fillText('Time:  10:30 AM',12,56);g.fillText('Next Dose:01:00 PM',12,116)}),-1.147,.907,.285,panel,false);
+[0x2fa8ff,0xff3030,0x3ddc50,0xffc400].forEach((c,i)=>{cyl(.065,.03,M(0x7a7e88,{metalness:.6}),-1.497,.603-i*.144,.275,[Math.PI/2,0,0],panel);led(c,-1.497,.603-i*.144,.29,panel,.05,i!==0)});
+led(0xff2b2b,.133,.203,.285,panel,.04,true);
+cyl(.115,.05,M(0x6a6f7a,{metalness:.6}),1.463,.267,.28,[Math.PI/2,0,0],panel);cyl(.075,.06,M(0x1d6dff,{emissive:0x0b3a9a,roughness:.2}),1.463,.267,.31,[Math.PI/2,0,0],panel);
+/* inside the panel */
+cyl(.25,.08,M(0x15171c),.133,.65,.17,[Math.PI/2,0,0],panel);cyl(.14,.1,M(0x484d58,{metalness:.7}),.133,.65,.14,[Math.PI/2,0,0],panel);
+box(1.0,.5,.03,M(0x0f7a3f),-1.147,.907,.19,panel);box(.3,.12,.04,M(0x222222),-1.0,.85,.21,panel);
+box(.1,.78,.03,M(0x0f7a3f),-1.5,.4,.2,panel);box(.2,.2,.03,M(0x0f7a3f),1.463,.267,.2,panel);
+
+/* ---------- electronics on back wall / floor ---------- */
+const ez=-.95;
+box(.8,.55,.04,M(0x0f7a3f),-1.5,1.0,ez);box(.35,.3,.05,M(0x2b2b2b),-1.5,1.0,ez+.04);box(.45,.2,.06,M(0xc7ccd4,{metalness:.7}),-1.5,1.2,ez+.05);
+box(.5,.4,.04,M(0x1d4ed8),-.75,1.15,ez);cyl(.08,.04,M(0xd4af37,{metalness:.8}),-.75,1.15,ez+.04,[Math.PI/2,0,0]);
+cyl(.17,.2,M(0x15171c),-.15,1.0,ez+.1,[Math.PI/2,0,0]);cyl(.05,.21,M(0x555a66),-.15,1.0,ez+.1,[Math.PI/2,0,0]);
+box(.55,.5,.04,M(0xb4232a),.55,.95,ez);box(.3,.3,.05,M(0x222222),.55,.95,ez+.04);box(.12,.14,.05,M(0xc7ccd4,{metalness:.7}),.75,1.1,ez+.05);
+box(.45,.32,.04,M(0x1473c9),1.2,1.15,ez);box(.14,.1,.05,M(0xd9dde4,{metalness:.6}),1.3,1.15,ez+.04);
+box(.5,.4,.04,M(0x0f7a3f),1.75,.95,ez);box(.18,.14,.06,M(0x222222),1.75,.95,ez+.05);
+box(1.5,.1,.62,M(0x1b1d24),0,.4,-.55);
+[-.72,-.4].forEach(z=>{cyl(.15,1.3,M(0x9b2fae,{roughness:.3,metalness:.3}),0,.52,z,[0,0,Math.PI/2]);cyl(.1,1.34,M(0xc9ccd3,{metalness:.8}),0,.52,z,[0,0,Math.PI/2],root,16)});
+const wc=[0xff9a1f,0xffe14d,0x6ee7b7,0xf472b6,0x7dd3fc];
+const wire=(pts,c)=>{root.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),28,.016,6),M(c)))};
+xs.forEach((x,i)=>wire([new THREE.Vector3(x,1.16,-.05),new THREE.Vector3(x*.8,1.3,-.35),new THREE.Vector3(-1.7+i*.1,1.1,-.8),new THREE.Vector3(-1.7+i*.1,1.0,ez)],wc[i]));
+root.updateMatrixWorld(true);
+const pw=(x,y,z)=>panel.localToWorld(new THREE.Vector3(x,y,z));
+[[-1.147,.9],[.133,.65],[1.463,.267]].forEach((p,i)=>wire([pw(p[0],p[1],.1),pw(p[0],.1,-.1),new THREE.Vector3(-1.2+i*.2,1.42,-.8),new THREE.Vector3(-1.2+i*.2,1.15,ez)],[0xffffff,0xff5c5c,0x60a5fa][i]));
+
+/* ---------- exterior ports ---------- */
+const zb=-1.05-.03;
+cyl(.07,1.9,M(0x15171c),1.9,2.05,-1.17);cyl(.1,.2,dark,1.9,1.1,-1.17);box(.3,.9,.05,dark,1.9,.9,-1.1);
+box(.3,.2,.04,M(0x111111),-.8,.75,zb);box(.14,.1,.03,M(0xf3f3f3),-.8,.75,zb-.02);box(.3,.16,.04,M(0x111111),-.2,.75,zb);box(.12,.05,.03,M(0x888888),-.2,.75,zb-.02);
+box(.9,.35,.02,M(0xdfe3ea),.9,.75,zb+.01);
+cyl(.2,.05,M(0xdddddd),2.19,.82,-.1,[0,0,Math.PI/2]);cyl(.16,.08,M(0xd91f2a,{emissive:0x550008}),2.22,.82,-.1,[0,0,Math.PI/2]);
+const sosT=plane(.28,.14,tex(128,64,(g,w)=>{g.fillStyle='#fff';g.font='bold 40px Arial';g.textAlign='center';g.fillText('SOS',w/2,46)}),2.265,.82,-.1);sosT.rotation.y=Math.PI/2;
+[.5,1.1].forEach(y=>cyl(.05,.3,dark,-2.17,y,-.9));[.5,1.1].forEach(y=>cyl(.05,.3,dark,2.17,y,-.9));
+
+/* platform */
+const wood=tex(512,512,(g)=>{g.fillStyle='#8a5a2e';g.fillRect(0,0,512,512);for(let i=0;i<90;i++){g.fillStyle='rgba('+(60+Math.random()*60|0)+',30,10,'+(Math.random()*.18)+')';g.fillRect(0,Math.random()*512,512,1+Math.random()*3)}});
+const floor=new THREE.Mesh(new THREE.PlaneGeometry(14,14),new THREE.ShadowMaterial({opacity:.38}));floor.rotation.x=-Math.PI/2;floor.position.y=-.002;floor.receiveShadow=true;scene.add(floor);
+root.traverse(o=>{if(o.isMesh&&!(o.material.userData&&o.material.userData.ns)&&!(o.material.map&&o.geometry.type==='PlaneGeometry'))o.castShadow=true});
+
+/* labels */
+const tags=[];
+function tag(t,v,inside){const el=document.createElement('div');el.className='tag'+(inside?' in':'');el.textContent=t}
+const V3=(x,y,z)=>new THREE.Vector3(x,y,z);
+[['LCD display',pw(-1.147,.907,.31)],['Status LEDs',pw(-1.497,.46,.31)],['Speaker',pw(.133,.65,.29)],['Alarm LED',pw(.133,.203,.31)],['Dose confirmed button',pw(1.463,.267,.37)],['Compartment lids',V3(-.31,.62,1.03)],['Lid LED',V3(.97,1.14,.93)],['SOS button',V3(2.3,.82,-.1)],['Antenna',V3(1.9,2.95,-1.17)],['ON/OFF switch',V3(-.8,.75,-1.1)],['DC 5V port',V3(-.2,.75,-1.1)]].forEach(a=>tag(a[0],a[1],false));
+[['Servo motor',V3(-.31,1.14,-.05)],['Reed sensor',V3(.97,1.25,.62)],['ESP32',V3(-1.5,1.31,ez+.05)],['RTC DS3231',V3(-.75,1.36,ez+.04)],['Buzzer',V3(-.15,1.18,ez+.1)],['SIM800L GSM',V3(.55,1.21,ez+.06)],['TP4056 charger',V3(1.2,1.32,ez+.04)],['Power module',V3(1.75,1.16,ez+.06)],['Battery 18650 ×2',V3(0,.69,-.4)],['Wiring harness',V3(-1.7,1.1,-.8)],['Speaker driver',pw(.133,.9,.22)],['LCD board',pw(-1.147,1.16,.21)]].forEach(a=>tag(a[0],a[1],true));
+
+/* controls */
+let th=.55,ph=1.4,r=10.5,tth=th,tph=ph,tr=r,auto=true,drag=false,lx=0,ly=0,mv=0,insideMode=false,showLabels=true,op=1;
+const cv=renderer.domElement,ray=new THREE.Raycaster(),mp=new THREE.Vector2();
+cv.addEventListener('pointerdown',e=>{drag=true;mv=0;lx=e.clientX;ly=e.clientY;cv.setPointerCapture(e.pointerId)});
+cv.addEventListener('pointermove',e=>{if(!drag)return;const dx=e.clientX-lx,dy=e.clientY-ly;mv+=Math.abs(dx)+Math.abs(dy);tth-=dx*.01;tph=Math.min(3.04,Math.max(.1,tph-dy*.01));th=tth;ph=tph;lx=e.clientX;ly=e.clientY});
+cv.addEventListener('pointerup',e=>{drag=false;if(mv<5){const b=cv.getBoundingClientRect();mp.set((e.clientX-b.left)/b.width*2-1,-(e.clientY-b.top)/b.height*2+1);ray.setFromCamera(mp,camera);const h=ray.intersectObjects(lidMeshes,false)[0];if(h){const l=lids[h.object.userData.i];l.t=l.t?0:1}}});
+cv.addEventListener('pointercancel',()=>drag=false);
+cv.addEventListener('wheel',e=>{e.preventDefault();tr=Math.min(16,Math.max(5,tr+e.deltaY*.01))},{passive:false});
+const autoB=document.getElementById('auto'),inB=document.getElementById('inside'),lbB=document.getElementById('labels');
+const setV=(a,p)=>{auto=false;autoB.classList.remove('on');tth=a+Math.round((th-a)/(2*Math.PI))*2*Math.PI;tph=p};
+const VW={front:[0,1.5],right:[Math.PI/2,1.5],back:[Math.PI,1.5],left:[-Math.PI/2,1.5]};
+document.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>{const k=b.dataset.v;k==='top'?setV(th,.3):k==='bottom'?setV(th,2.85):setV(VW[k][0],VW[k][1])});
+autoB.onclick=()=>{auto=!auto;autoB.classList.toggle('on',auto)};
+inB.onclick=()=>{insideMode=!insideMode;inB.classList.toggle('on',insideMode);inB.textContent=insideMode?'Outside view':'Inside view'};
+lbB.onclick=()=>{showLabels=!showLabels;lbB.classList.toggle('on',showLabels)};
+zi.onclick=()=>tr=Math.max(5,tr-1.3);zo.onclick=()=>tr=Math.min(16,tr+1.3);
+/* ---- parts panel + highlight ---- */
+const NM=['Morning','Noon','Evening','Night','Extra'],LEDN=['blue','yellow','green','red','blue'],IV=[.4,1.05],PI=Math.PI;
+const DEFS=[
+['lcd','LCD display','Shows the current time and the next dose time.','out',panel,[-1.147,.907,.27],[.98,.37,.1],[0,1.35]],
+['led','Status LEDs','Power (blue), Alert (red), Dose taken (green) and Connect (yellow).','out',panel,[-1.497,.387,.28],[.3,.62,.1],[0,1.35]],
+['spk','Speaker','Plays the sound and voice reminder.','out',panel,[.133,.65,.27],[.6,.6,.1],[0,1.35]],
+['alm','Alarm LED','Lights up red when a dose is due.','out',panel,[.133,.203,.28],[.16,.16,.1],[0,1.35]],
+['how','How it works box','Printed guide on the panel: set schedule to record.','out',panel,[.9,.52,.27],[.67,.84,.08],[0,1.35]],
+['btn','Dose confirmed button','Press it after taking the dose so the device logs it.','out',panel,[1.463,.267,.3],[.3,.3,.12],[0,1.35]],
+['logo','MEDI-TRACK logo','Heart-plus logo on the right of the base.','out',root,[1.74,.78,.9],[.95,.95,.06],[0,1.4]],
+['sos','SOS button','Emergency button on the right side of the box.','out',root,[2.2,.82,-.1],[.14,.45,.45],[PI/2,1.4]],
+['ant','Antenna','Improves GSM and WiFi signal. Sits on the back.','out',root,[1.9,2.05,-1.17],[.25,1.95,.25],[PI,1.3]],
+['pw','ON/OFF switch','Main power switch on the back.','out',root,[-.8,.75,-1.08],[.4,.28,.1],[PI,1.4]],
+['dc','DC 5V port','Charging and power input on the back.','out',root,[-.2,.75,-1.08],[.4,.24,.1],[PI,1.4]],
+['srv','Servo motors','One per compartment. They open the lid at dose time.','in',root,[-.31,.95,-.05],[2.95,.42,.45],IV],
+['reed','Reed sensors','Detect whether a compartment lid was opened.','in',root,[-.31,1.2,.62],[2.95,.2,.2],IV],
+['esp','ESP32','Main controller. Runs the schedule and WiFi.','in',root,[-1.5,1.0,ez],[.85,.6,.12],IV],
+['rtc','RTC DS3231','Real-time clock that keeps exact time.','in',root,[-.75,1.15,ez],[.55,.45,.12],IV],
+['lcb','LCD board','Display module behind the LCD.','in',panel,[-1.147,.907,.19],[1.05,.55,.08],IV],
+['buz','Buzzer','Sounds the alarm beep.','in',root,[-.15,1.0,ez+.05],[.4,.4,.3],IV],
+['spd','Speaker driver','Speaker unit behind the grille.','in',panel,[.133,.65,.17],[.55,.55,.2],IV],
+['sim','SIM800L GSM','Sends alerts to the caregiver when WiFi is off.','in',root,[.55,.95,ez],[.6,.55,.12],IV],
+['tp','TP4056 charger','Charges the battery safely.','in',root,[1.2,1.15,ez],[.5,.37,.12],IV],
+['pwm','Power module','Regulates power for all parts.','in',root,[1.75,.95,ez],[.55,.45,.12],IV],
+['bat','Battery 18650 x2','Keeps the box running during a power cut.','in',root,[0,.52,-.56],[1.4,.36,.6],IV],
+['wir','Wiring harness','Colored wires linking servos and panel to the ESP32.','in',root,[-.9,1.1,-.4],[2.6,.6,1.1],IV]];
+NM.forEach((n,i)=>DEFS.push(['lid'+i,n+' compartment','Holds the '+n.toLowerCase()+' pills. The '+LEDN[i]+' LED lights at dose time. Tap the lid on the model to open it.','out',root,[xs[i],.75,.66],[.62,.8,.72],[0,1.3]]));
+const PART={};DEFS.forEach(d=>PART[d[0]]={name:d[1],desc:d[2],grp:d[3],par:d[4],c:d[5],s:d[6],view:d[7]});
+const SECS={out:[['Control panel',['lcd','led','spk','alm','how','btn']],['Pill compartments',['lid0','lid1','lid2','lid3','lid4']],['Base, ports and antenna',['logo','sos','ant','pw','dc']]],in:[['Moving parts and sensors',['srv','reed']],['Controller and timing',['esp','rtc','lcb']],['Alerts and connectivity',['buz','spd','sim']],['Power',['tp','pwm','bat']],['Wiring',['wir']]]};
+const STEPS=[['Set schedule','Dose times are set once. The LCD shows the next dose.',['lcd','btn']],['Reminder','The speaker sounds and the compartment LED lights up.',['spk','alm','led']],['Dispense','The servo opens the lid of the right compartment.',['lid0','lid1','lid2','lid3','lid4']],['Detect','A reed sensor records whether the lid was opened.',['reed']],['Missed dose','If the dose is not taken in time, the GSM module alerts the caregiver.',['sim']],['Record','The ESP32 and RTC store the dose history.',['esp','rtc']]];
+const pnl=document.createElement('div');pnl.id='panel';document.body.appendChild(pnl);
+let selIds=[];const hlList=[];
+function hlTick(t){hlList.forEach(h=>{h.fill.material.opacity=.18+.14*Math.sin(t*5)})}
+function clearHl(){hlList.forEach(h=>{h.par.remove(h.g);h.fill.geometry.dispose()});hlList.length=0}
+function setMode(v,keep){insideMode=v;inB.classList.toggle('on',v);inB.textContent=v?'Outside view':'Inside view';if(!keep){selIds=[];clearHl()}renderPanel()}
+inB.onclick=()=>setMode(!insideMode);
+lbB.onclick=()=>{const s=pnl.style.display==='none';pnl.style.display=s?'':'none';lbB.classList.toggle('on',s)};
+function selectIds(ids){
+ if(selIds.join()===ids.join()){selIds=[];clearHl();renderPanel();return}
+ const f=PART[ids[0]];if((f.grp==='in')!==insideMode)setMode(f.grp==='in',true);
+ selIds=ids;clearHl();
+ ids.forEach(id=>{const p=PART[id],dt=p.grp!=='in',g=new THREE.Group();g.position.set(p.c[0],p.c[1],p.c[2]);
+  const fill=new THREE.Mesh(new THREE.BoxGeometry(p.s[0],p.s[1],p.s[2]),new THREE.MeshBasicMaterial({color:0xffd84a,transparent:true,opacity:.25,depthWrite:false,depthTest:dt}));
+  const ln=new THREE.LineSegments(new THREE.EdgesGeometry(fill.geometry),new THREE.LineBasicMaterial({color:0xffd84a,depthTest:dt}));
+  fill.renderOrder=ln.renderOrder=999;g.add(fill);g.add(ln);p.par.add(g);hlList.push({g,par:p.par,fill})});
+ const v=f.view;auto=false;autoB.classList.remove('on');tth=v[0]+Math.round((th-v[0])/(2*PI))*2*PI;tph=v[1];tr=Math.min(tr,9);
+ renderPanel()}
+function item(n,d,ids,st){const b=document.createElement('button');b.className='it'+(st?' st':'')+(selIds.join()===ids.join()?' on':'');b.innerHTML='<b></b><small></small>';b.firstChild.textContent=n;b.lastChild.textContent=d;b.onclick=()=>selectIds(ids);return b}
+function renderPanel(){pnl.innerHTML='';
+ const seg=document.createElement('div');seg.className='seg';
+ [['Outside',false],['Inside',true]].forEach(a=>{const b=document.createElement('button');b.textContent=a[0];b.className=insideMode===a[1]?'on':'';b.onclick=()=>setMode(a[1]);seg.appendChild(b)});pnl.appendChild(seg);
+ SECS[insideMode?'in':'out'].forEach(s=>{const h=document.createElement('h3');h.textContent=s[0];pnl.appendChild(h);s[1].forEach(id=>pnl.appendChild(item(PART[id].name,PART[id].desc,[id],false)))});
+ const h=document.createElement('h3');h.textContent='How it works';pnl.appendChild(h);
+ STEPS.forEach((s,i)=>pnl.appendChild(item((i+1)+'. '+s[0],s[1],s[2],true)))}
+renderPanel();if(innerWidth<700){pnl.style.display='none';lbB.classList.remove('on')}
+function resize(){const w=stage.clientWidth,h=stage.clientHeight;renderer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix();if(w/h<.85){tr=r=13}}
+addEventListener('resize',resize);resize();
+const tmp=new THREE.Vector3(),clk=new THREE.Clock(),dir=new THREE.Vector3();let fr=0,occOut=null,occIn=null;
+function occ(){if(occOut)return;occOut=[];occIn=[];scene.traverse(o=>{if(o.isMesh&&o!==floor&&!(o.material.userData&&o.material.userData.ns)){occOut.push(o);if(!o.material.transparent)occIn.push(o)}})}
+function loop(){requestAnimationFrame(loop);const t=clk.getElapsedTime();
+ fr++;hlTick(t);if(auto&&!drag)tth+=.004;
+ th+=(tth-th)*.12;ph+=(tph-ph)*.12;r+=(tr-r)*.12;
+ const to=insideMode?.09:1;op+=(to-op)*.12;shellMat.opacity=op;white.opacity=1;shellMat.depthWrite=op>.9;face.material.opacity=Math.max(.15,op);
+ lids.forEach(l=>{l.open+=(l.t-l.open)*.12;l.pv.rotation.x=-l.open*1.35});
+ pulses.forEach(p=>{p.sp.material.opacity=.55+.45*Math.sin(t*3+p.ph)});
+ camera.position.set(r*Math.sin(ph)*Math.sin(th),r*Math.cos(ph)+1.4,r*Math.sin(ph)*Math.cos(th));camera.lookAt(0,1.3,0);
+ renderer.render(scene,camera);
+ const w=stage.clientWidth,h=stage.clientHeight;
+ tags.forEach(a=>{if(!(showLabels&&a.inside===insideMode)){a.el.style.display='none';return}
+  tmp.copy(a.v).project(camera);if(tmp.z>=1){a.el.style.display='none';return}occ();
+  if(a.vis===undefined||fr%4===0){dir.copy(a.v).sub(camera.position);const d=dir.length();ray.set(camera.position,dir.normalize());ray.far=d;const hit=ray.intersectObjects(insideMode?occIn:occOut,false)[0];a.vis=!(hit&&hit.distance<d-.18)}
+  a.el.style.display='block';a.el.style.opacity=a.vis?1:0;
+  a.el.style.transform='translate('+((tmp.x*.5+.5)*w)+'px,'+((-tmp.y*.5+.5)*h)+'px) translate(-50%,-130%)'});
+}
+loop();
+</script></body></html>
